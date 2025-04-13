@@ -1,0 +1,46 @@
+#!/bin/bash
+# crear_entorno_desarrollo.sh
+# Script para crear la estructura de carpetas del entorno de desarrollo del Gestor de Red
+
+# Definir la ruta base del entorno de desarrollo
+BASE_DIR="/root/gestor_de_red"
+
+# Lista de directorios a crear (relativos a BASE_DIR)
+DIRS=(
+    "$BASE_DIR/bin"
+    "$BASE_DIR/bin/comandos"
+    "$BASE_DIR/modules"
+    "$BASE_DIR/modules/escaneo"
+    "$BASE_DIR/modules/monitor"
+    "$BASE_DIR/modules/pruebas"
+    "$BASE_DIR/modules/vulnerabilidades"
+    "$BASE_DIR/complements"
+    "$BASE_DIR/complements/scripts"
+    "$BASE_DIR/complements/librerias"
+    "$BASE_DIR/sql"
+    "$BASE_DIR/sql/inicio"
+    "$BASE_DIR/sql/xcript"
+    "$BASE_DIR/logs"
+    "$BASE_DIR/logs/gestor"
+    "$BASE_DIR/logs/modulos"
+    "$BASE_DIR/logs/complementos"
+    "$BASE_DIR/aux"
+    "$BASE_DIR/src"
+    "$BASE_DIR/src/core"
+    "$BASE_DIR/src/normal"
+    "$BASE_DIR/config"
+)
+
+echo "Creando la estructura de carpetas en: $BASE_DIR"
+
+# Iterar sobre la lista de directorios y crearlos si no existen
+for DIR in "${DIRS[@]}"; do
+    if [ ! -d "$DIR" ]; then
+        mkdir -p "$DIR"
+        echo "Creado: $DIR"
+    else
+        echo "Ya existe: $DIR"
+    fi
+done
+
+echo "Estructura del entorno de desarrollo completada."

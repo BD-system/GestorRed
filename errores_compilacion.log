@@ -1,0 +1,4 @@
+gestor_red/equipos_red/analizarRedFase1.cpp: In static member function ‘static std::vector<EquiposRed> EquiposRed::analizarRedFase1(const std::string&, const std::string&, const std::string&)’:
+gestor_red/equipos_red/analizarRedFase1.cpp:39:14: warning: unused variable ‘totalHosts’ [-Wunused-variable]
+   39 |     uint32_t totalHosts = ipEnd - ipStart - 1;
+      |              ^~~~~~~~~~

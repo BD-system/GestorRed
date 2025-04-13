@@ -1,0 +1,113 @@
+#include "equipos_red/EquiposRed.hpp"
+#include <cstdio>
+#include <iostream>
+#include <regex>
+#include <set>
+#include <sstream>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <string>
+#include <algorithm>
+#include <cctype>
+
+// Función trim: elimina espacios, saltos de línea, retornos de carro y tabulaciones
+std::string trim(const std::string& s) {
+    size_t start = s.find_first_not_of(" \n\r\t");
+    if (start == std::string::npos)
+        return "";
+    size_t end = s.find_last_not_of(" \n\r\t");
+    return s.substr(start, end - start + 1);
+}
+
+// Función auxiliar para calcular la máscara CIDR
+int calcularCIDR(const std::string& ipRed, const std::string& broadcast) {
+    in_addr red, bcast;
+    inet_pton(AF_INET, ipRed.c_str(), &red);
+    inet_pton(AF_INET, broadcast.c_str(), &bcast);
+    uint32_t n_red = ntohl(red.s_addr);
+    uint32_t n_bcast = ntohl(bcast.s_addr);
+    uint32_t diferencia = n_bcast - n_red + 1;
+
+    int bits = 32;
+    while (diferencia > 1) {
+        diferencia >>= 1;
+        --bits;
+    }
+    return bits;
+}
+
+// Función para validar que una cadena sea una IPv4 válida
+bool ipValida(const std::string& ip) {
+    if (ip.empty() || ip.size() > 32) return false;
+    std::regex ipRegex("^((25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)\\.){3}(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)$");
+    return std::regex_match(ip, ipRegex);
+}
+
+// Solo Fase 1: Escaneo de dispositivos activos con Nmap
+std::vector<EquiposRed> EquiposRed::analizarRedFase1(const std::string& ipRed,
+                                                     const std::string& broadcast,
+                                                     const std::string& interfaz)
+{
+    std::vector<EquiposRed> encontrados;
+    encontrados.reserve(256);
+    std::set<std::string> ipsDetectadas;
+    int cidr = calcularCIDR(ipRed, broadcast);
+
+    std::cout << "[DEBUG][Fase1] Buscar dispositivos encendidos en la red\n";
+
+    std::ostringstream comando;
+    comando << "nmap -sn -n --min-parallelism 10 --max-retries 1 --host-timeout 500ms -e "
+            << interfaz << " " << ipRed << "/" << cidr;
+    FILE* fp = popen(comando.str().c_str(), "r");
+    if (!fp) {
+        std::cerr << "[ERROR] Fallo al ejecutar Nmap [Fase1]\n";
+        return encontrados;
+    }
+
+    char buffer[512];
+    std::string ipActual;
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        std::string linea(buffer);
+        if (linea.find("Nmap scan report for") != std::string::npos) {
+            size_t pos = linea.find_last_of(' ');
+            if (pos != std::string::npos) {
+                ipActual = trim(linea.substr(pos + 1));
+                if (!ipValida(ipActual)) continue;
+                ipsDetectadas.insert(ipActual);
+                EquiposRed equipo(ipActual, "vigilancia");
+                equipo.setMetodo("Nmap-ping");
+                equipo.setInterfaz(interfaz);
+                encontrados.push_back(equipo);
+            }
+        }
+        else if (linea.find("MAC Address:") != std::string::npos && !ipActual.empty()) {
+            std::regex macRegex("MAC Address: ([0-9A-Fa-f:]{17}) ?(.*)?");
+            std::smatch match;
+            if (std::regex_search(linea, match, macRegex)) {
+                std::string mac = match[1];
+                std::string vendor = match.size() > 2 ? match[2].str() : "";
+                for (auto& e : encontrados) {
+                    if (e.getIP() == ipActual) {
+                        e.setMAC(mac);
+                        e.setVendor(vendor);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    pclose(fp);
+    std::cout << "[DEBUG][Fase1] Completada: " << encontrados.size() << " dispositivos encontrados.\n";
+
+    std::cout << "\nResumen de dispositivos activos:\n";
+    for (const auto& d : encontrados) {
+        std::cout << "IP: " << d.getIP();
+        if (!d.getMAC().empty())
+            std::cout << " | MAC: " << d.getMAC();
+        std::cout << " | Método: " << d.getMetodo() << "\n";
+    }
+
+    return encontrados;
+}
