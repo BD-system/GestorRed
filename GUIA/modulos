@@ -1,0 +1,210 @@
+1. ¿Qué es un módulo?
+Un módulo es una librería compartida (.so) en C o C++.
+
+Se carga dinámicamente por la terminal con el comando exec.
+
+Cada módulo implementa funcionalidades ampliables: comandos avanzados, payloads, análisis, etc
+
+----------------------------------------------------------
+
+Crea tu módulo en:
+/root/gestor_de_red/modules/<categoria>/
+
+El .so va en esa carpeta.
+
+Si el módulo necesita archivos binarios privados (payloads), crea la carpeta oculta:
+/root/gestor_de_red/modules/<categoria>/.<nombre_modulo>/
+
+----------------------------------------------------------
+
+3. Obligatorio: plantilla mínima de un módulo
+Tu módulo debe exportar SIEMPRE estas funciones con extern "C":
+
+#include <stdio.h>
+#include <stdlib.h>
+
+// Función principal obligatoria: ejecuta el comando con los argumentos de la terminal
+extern "C" void run(const char* args) {
+    // Tu lógica aquí
+}
+
+// Nombre del módulo (obligatorio)
+extern "C" const char* name() { return "nombre_modulo"; }
+
+// Descripción corta (obligatorio)
+extern "C" const char* description() { return "Explicación rápida del módulo"; }
+
+// Comando de ayuda -h (obligatorio)
+extern "C" void help_exec() {
+    printf("Uso: exec nombre_modulo [args]\n");
+    printf("Descripción: Explica qué hace el módulo y ejemplos de uso.\n");
+    printf("Ejemplo: exec nombre_modulo -opcion\n");
+}
+
+----------------------------------------------------------
+
+4. Cómo acceder a payloads
+Si tu módulo usa payloads privados, accede a ellos con:
+
+const char* payload_dir = getenv("GDR_PAYLOAD_PATH");
+
+----------------------------------------------------------
+
+5. Compilación
+C++:
+g++ -std=c++17 -fPIC -shared -o nombre_modulo.so nombre_modulo.cpp
+
+C:
+gcc -fPIC -shared -o nombre_modulo.so nombre_modulo.c
+
+----------------------------------------------------------
+
+Plantilla para un módulo (copia y pega)
+
+C:
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// Accede a la carpeta de payloads privados mediante la variable de entorno
+const char* get_payload_path(const char* archivo) {
+    const char* dir = getenv("GDR_PAYLOAD_PATH");
+    static char full_path[1024];
+    if (dir) {
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir, archivo);
+        return full_path;
+    }
+    return archivo; // fallback: solo el nombre si no hay env
+}
+
+// Función principal
+void run(const char* args) {
+    printf("[modulo_demo] Ejecutando con argumentos: %s\n", args ? args : "");
+
+    // Ejemplo: leer un payload privado
+    const char* payload_file = get_payload_path("test_payload.bin");
+    FILE* f = fopen(payload_file, "rb");
+    if (!f) {
+        printf("No se pudo abrir el payload: %s\n", payload_file);
+    } else {
+        printf("Payload abierto correctamente: %s\n", payload_file);
+        fclose(f);
+    }
+}
+
+// Funciones obligatorias
+const char* name()        { return "modulo_demo"; }
+const char* description() { return "Módulo de ejemplo en C con payloads."; }
+void help_exec() {
+    printf("Uso: exec modulo_demo [args]\n");
+    printf("Descripción: Módulo ejemplo C, muestra cómo acceder a archivos privados (payloads).\n");
+    printf("Ejemplo: exec modulo_demo test\n");
+    printf("Para usar payloads privados, ponlos en la carpeta oculta .modulo_demo y accede con GDR_PAYLOAD_PATH.\n");
+}
+
+// Exportar símbolos como C puro (si tu loader lo requiere)
+#ifdef __cplusplus
+extern "C" {
+#endif
+void run(const char* args);
+const char* name();
+const char* description();
+void help_exec();
+#ifdef __cplusplus
+}
+#endif
+
+---------------
+
+C++:
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+
+// Acceso a payload oculto
+std::string get_payload_path(const std::string& archivo) {
+    const char* dir = getenv("GDR_PAYLOAD_PATH");
+    if (dir)
+        return std::string(dir) + "/" + archivo;
+    return archivo;
+}
+
+// Función principal
+extern "C" void run(const char* args) {
+    printf("[modulo_demo] Ejecutando con argumentos: %s\n", args ? args : "");
+
+    // Ejemplo: acceder a un payload privado
+    std::string file = get_payload_path("test_payload.bin");
+    FILE* f = fopen(file.c_str(), "rb");
+    if (!f) {
+        printf("No se pudo abrir el payload: %s\n", file.c_str());
+    } else {
+        printf("Payload abierto correctamente: %s\n", file.c_str());
+        fclose(f);
+    }
+}
+
+extern "C" const char* name()        { return "modulo_demo"; }
+extern "C" const char* description() { return "Módulo de ejemplo en C++ con payloads."; }
+extern "C" void help_exec() {
+    printf("Uso: exec modulo_demo [args]\n");
+    printf("Descripción: Módulo ejemplo C++, muestra cómo acceder a archivos privados (payloads).\n");
+    printf("Ejemplo: exec modulo_demo test\n");
+    printf("Para usar payloads privados, ponlos en la carpeta oculta .modulo_demo y accede con GDR_PAYLOAD_PATH.\n");
+}
+
+---------------
+
+Rust (Ejemplo generado por IA):
+
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char};
+use std::env;
+use std::fs::File;
+use std::path::PathBuf;
+
+// Acceso a payload oculto
+fn get_payload_path(archivo: &str) -> String {
+    match env::var("GDR_PAYLOAD_PATH") {
+        Ok(dir) => format!("{}/{}", dir, archivo),
+        Err(_)  => archivo.to_string()
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn run(args: *const c_char) {
+    let args_str = unsafe { 
+        if args.is_null() { "" } else { CStr::from_ptr(args).to_str().unwrap_or("") }
+    };
+    println!("[modulo_demo_rust] Ejecutando con argumentos: {}", args_str);
+
+    let payload = get_payload_path("test_payload.bin");
+    if File::open(&payload).is_ok() {
+        println!("Payload abierto correctamente: {}", payload);
+    } else {
+        println!("No se pudo abrir el payload: {}", payload);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn name() -> *const c_char {
+    CString::new("modulo_demo_rust").unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn description() -> *const c_char {
+    CString::new("Módulo de ejemplo en Rust con payloads.").unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn help_exec() {
+    println!("Uso: exec modulo_demo_rust [args]");
+    println!("Descripción: Módulo ejemplo Rust, accede a archivos privados (payloads).");
+    println!("Ejemplo: exec modulo_demo_rust test");
+    println!("Pon los payloads en la carpeta oculta .modulo_demo_rust y accede con GDR_PAYLOAD_PATH.");
+}
+
+
