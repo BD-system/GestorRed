@@ -13,13 +13,14 @@
 #include <signal.h>
 extern "C" const char *strsignal(int);
 
-// Ruta absoluta configurable para módulos (cambia esto según tu entorno)
-std::string modules_dir = "/root/gestor_de_red/modules"; // <-- CAMBIA AQUÍ según el entorno
+// Ruta absoluta configurable para módulos
+std::string modules_dir = "/root/gestor_de_red/modules"; // <-- CAMBIA AQUÍ según tu entorno
 
 // --- Estructura del módulo ---
 struct ModuleInfo {
-    std::string path;
-    std::string description;
+    std::string path;           // Ruta completa al .so
+    std::string description;    // Descripción del módulo
+    std::string payload_dir;    // Carpeta privada (vacía si no existe)
 };
 static std::map<std::string, ModuleInfo> module_cache;
 static bool cache_created = false;
@@ -38,12 +39,35 @@ std::string get_modulo(const std::string& args, std::string& modulo_args) {
 
 void print_usage() {
     std::cout << BOLD << CYAN << "\nComandos disponibles:\n" << RESET
-              << GREEN << "  <modulo> [args]" << RESET << "  Ejecuta el módulo indicado con argumentos opcionales\n"
-              << GREEN << "  <modulo> -h    " << RESET << "  Muestra la ayuda específica de un módulo\n"
-              << GREEN << "  -l, --list     " << RESET << "  Lista todos los módulos disponibles\n"
-              << GREEN << "  --reload       " << RESET << "  Recarga la caché de módulos\n"
+              << GREEN << "  <modulo> [args]" << RESET << "      Ejecuta el módulo indicado con argumentos opcionales\n"
+              << GREEN << "  <modulo> -h" << RESET << "           Muestra la ayuda específica de un módulo\n"
+              << GREEN << "  -l, --list" << RESET << "            Lista todos los módulos disponibles\n"
+              << GREEN << "  --reload" << RESET << "              Recarga la caché de módulos\n"
+              << std::endl
+
+              << BOLD << CYAN << "Gestión de payloads y archivos:\n" << RESET
+              << "  Cuando un módulo necesita un archivo (payload):\n"
+              << "    - Si sólo indicas el nombre del archivo (por ejemplo, " << BOLD << "SO_2.bin" << RESET << "),\n"
+              << "      la terminal lo busca automáticamente en la carpeta privada del módulo,\n"
+              << "      por ejemplo: " << BOLD << "modules/escaneo/.icmp_payload/SO_2.bin" << RESET << "\n"
+              << "    - Si usas el prefijo " << BOLD << "modules:/" << RESET << " (por ejemplo, "
+              << BOLD << "modules:/payloads_escaneo/SO_2.bin" << RESET << "),\n"
+              << "      lo buscará en la ruta compartida: " << BOLD << "/root/gestor_de_red/src/modules/payloads_escaneo/SO_2.bin" << RESET << "\n"
+              << "    - Si no lo encuentra, intentará usar la ruta actual o absoluta que le des.\n"
+              << std::endl
+
+              << BOLD << CYAN << "Ejemplos de uso:\n" << RESET
+              << "  " << GREEN << "exec icmp_payload execmem_send 192.168.0.33 SO_2.bin 21" << RESET << "\n"
+              << "      (Busca SO_2.bin en la carpeta privada del módulo)\n"
+              << "  " << GREEN << "exec icmp_payload execmem_send 192.168.0.33 modules:/payloads_escaneo/SO_2.bin 21" << RESET << "\n"
+              << "      (Busca SO_2.bin en la carpeta compartida src/modules/payloads_escaneo/)\n"
+              << std::endl
+
+              << "Puedes crear tus propios módulos en C/C++ siguiendo la plantilla incluida, "
+              << "y aprovechar rutas inteligentes para los payloads.\n"
               << std::endl;
 }
+
 
 void print_no_modulo() {
     std::cout << RED << "[!] Debes especificar un módulo válido." << RESET << std::endl;
@@ -80,7 +104,14 @@ void build_module_cache(const std::string& base_path) {
         std::string name = name_fn ? name_fn() : entry.path().stem().string();
         std::string desc = desc_fn ? desc_fn() : "Sin descripción";
 
-        module_cache[name] = { entry.path().string(), desc };
+        // Calcula la carpeta de payloads: modules/.../.nombre_modulo
+        std::string payload_dir;
+        std::filesystem::path candidate = entry.path().parent_path() / ("." + entry.path().stem().string());
+        if (std::filesystem::exists(candidate) && std::filesystem::is_directory(candidate)) {
+            payload_dir = candidate.string();
+        }
+
+        module_cache[name] = { entry.path().string(), desc, payload_dir };
         dlclose(handle);
     }
     cache_created = true;
@@ -88,7 +119,7 @@ void build_module_cache(const std::string& base_path) {
 
 void list_modules() {
     if (!cache_created) {
-        build_module_cache(""); // usa modules_dir por defecto
+        build_module_cache(""); 
     }
     if (module_cache.empty()) {
         std::cout << YELLOW << "[!] No se encontraron módulos en: " << modules_dir << RESET << std::endl;
@@ -108,7 +139,7 @@ void list_modules() {
 
 void reload_modules() {
     std::cout << "[*] Recargando módulos..." << std::endl;
-    build_module_cache(""); // usa modules_dir por defecto
+    build_module_cache(""); 
     std::cout << "[OK] Módulos recargados." << std::endl;
 }
 
@@ -126,7 +157,12 @@ void run_modulo(const std::string& modulo, const std::string& modulo_args) {
         std::cerr << RED << "[ERROR] No se pudo crear el proceso para el módulo" << RESET << std::endl;
         return;
     } else if (pid == 0) {
-        // HIJO: carga y ejecuta el módulo .so
+        // HIJO: si existe carpeta de payload, la exporto
+        if (!it->second.payload_dir.empty()) {
+            setenv("GDR_PAYLOAD_PATH", it->second.payload_dir.c_str(), 1);
+        }
+
+        // carga y ejecuta el módulo .so
         void* handle = dlopen(it->second.path.c_str(), RTLD_LAZY);
         if (!handle) {
             std::cout << RED << "[!] Error cargando módulo: " << it->second.path << RESET << std::endl;

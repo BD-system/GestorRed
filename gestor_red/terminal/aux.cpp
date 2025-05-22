@@ -1,5 +1,3 @@
-// /gestor_red/equipos_red/aux.cpp
-
 #include "aux.hpp"
 #include "style_terminal.hpp"
 #include <iostream>
@@ -11,14 +9,17 @@
 #include <iomanip>
 #include <cstdlib>
 #include <sstream>
+#include <set>
 
 std::string aux_dir = "/root/gestor_de_red/aux"; // Modifica según tu entorno
+std::string python_envs_dir = "/root";           // Donde están los entornos virtuales
+std::string default_env_conf = "/root/gestor_de_red/config/aux_default_env.conf"; // Archivo de entorno por defecto
 
 struct AuxInfo {
-    std::string name;         // helloPY
-    std::string path;         // /ruta/hello.py
-    std::string tipo;         // py, sh, pr, c
-    std::string description;  // Descripción corta
+    std::string name;
+    std::string path;
+    std::string tipo;
+    std::string description;
 };
 static std::vector<AuxInfo> aux_cache;
 static bool aux_cache_ready = false;
@@ -90,8 +91,71 @@ void list_aux() {
     std::cout << std::endl;
 }
 
-// NUEVO: Ejecutar auxiliar por nombre (sin tipo, detectado de la caché)
-void run_aux(const std::string& nombre, const std::string& argumentos) {
+// --------- LISTAR ENTORNOS PYTHON DISPONIBLES ---------
+void list_python_envs() {
+    std::set<std::string> envs;
+    if (!std::filesystem::exists(python_envs_dir)) {
+        std::cout << RED << "[!] No se encontró el directorio de entornos: " << python_envs_dir << RESET << std::endl;
+        return;
+    }
+    for (const auto& entry : std::filesystem::directory_iterator(python_envs_dir)) {
+        if (entry.is_directory()) {
+            auto activate = entry.path() / "bin/activate";
+            if (std::filesystem::exists(activate)) {
+                envs.insert(entry.path().filename().string());
+            }
+        }
+    }
+    std::cout << BOLD << CYAN << "\nEntornos virtuales Python disponibles:\n" << RESET;
+    if (envs.empty()) {
+        std::cout << YELLOW << "  (Ningún entorno encontrado en " << python_envs_dir << ")" << RESET << std::endl;
+    } else {
+        for (const auto& env : envs)
+            std::cout << "  " << GREEN << env << RESET << std::endl;
+    }
+    std::cout << std::endl;
+}
+
+// --------- DETECTAR Y EXTRAER -p:<entorno> ---------
+std::string extraer_y_quitar_parametro_env(std::string& argumentos) {
+    std::string env_prefix = "-p:";
+    size_t pos = argumentos.find(env_prefix);
+    if (pos == std::string::npos) return "";
+    size_t start = pos + env_prefix.length();
+    size_t end = argumentos.find(' ', start);
+    std::string env;
+    if (end != std::string::npos)
+        env = argumentos.substr(start, end - start);
+    else
+        env = argumentos.substr(start);
+    argumentos.erase(pos, (end == std::string::npos ? argumentos.length() : end - pos));
+    while (!argumentos.empty() && isspace(argumentos.front())) argumentos.erase(argumentos.begin());
+    return env;
+}
+
+// --------- LEER ENV POR DEFECTO DE .CONF ---------
+std::string leer_env_por_defecto() {
+    std::ifstream f(default_env_conf);
+    std::string env;
+    if (f.is_open() && std::getline(f, env)) {
+        // Limpia espacios y saltos de línea
+        while (!env.empty() && (env.back() == '\n' || env.back() == '\r' || isspace(env.back())))
+            env.pop_back();
+        while (!env.empty() && isspace(env.front()))
+            env.erase(env.begin());
+        return env;
+    }
+    return "";
+}
+
+// --------- Ejecutar auxiliar por nombre (con -p:) ---------
+void run_aux(const std::string& nombre, std::string argumentos) {
+    std::string entorno = extraer_y_quitar_parametro_env(argumentos);
+
+    // Si el usuario NO especifica -p, intentamos leer el entorno por defecto
+    if (entorno.empty())
+        entorno = leer_env_por_defecto();
+
     if (!aux_cache_ready) build_aux_cache("");
     std::vector<const AuxInfo*> matches;
     for (const auto& aux : aux_cache) {
@@ -110,6 +174,7 @@ void run_aux(const std::string& nombre, const std::string& argumentos) {
     }
     const AuxInfo& aux = *matches[0];
     std::string comando;
+
     if (aux.tipo == "py") comando = "python3 '" + aux.path + "' " + argumentos;
     else if (aux.tipo == "sh") comando = "bash '" + aux.path + "' " + argumentos;
     else if (aux.tipo == "pr") comando = "perl '" + aux.path + "' " + argumentos;
@@ -118,6 +183,17 @@ void run_aux(const std::string& nombre, const std::string& argumentos) {
         std::cout << RED << "[!] Tipo de auxiliar no soportado: " << aux.tipo << RESET << std::endl;
         return;
     }
+
+    if (!entorno.empty()) {
+        std::filesystem::path activate = std::filesystem::path(python_envs_dir) / entorno / "bin/activate";
+        if (!std::filesystem::exists(activate)) {
+            std::cout << RED << "[!] Entorno virtual '" << entorno << "' no encontrado en " << activate.parent_path() << RESET << std::endl;
+            std::cout << "    Usa " << BOLD << "aux -lp" << RESET << " para listar entornos disponibles.\n";
+            return;
+        }
+        comando = "source '" + activate.string() + "' && " + comando;
+    }
+
     std::cout << "[*] Ejecutando: " << comando << std::endl;
     int ret = system(comando.c_str());
     if (ret == -1) {
@@ -125,8 +201,12 @@ void run_aux(const std::string& nombre, const std::string& argumentos) {
     }
 }
 
-// Si el usuario quiere forzar el tipo
-void run_aux_tipo(const std::string& tipo, const std::string& nombre, const std::string& argumentos) {
+// --------- Ejecutar auxiliar por tipo (con -p:) ---------
+void run_aux_tipo(const std::string& tipo, const std::string& nombre, std::string argumentos) {
+    std::string entorno = extraer_y_quitar_parametro_env(argumentos);
+    if (entorno.empty())
+        entorno = leer_env_por_defecto();
+
     if (!aux_cache_ready) build_aux_cache("");
     for (const auto& aux : aux_cache) {
         if (aux.name == nombre && aux.tipo == tipo) {
@@ -139,6 +219,15 @@ void run_aux_tipo(const std::string& tipo, const std::string& nombre, const std:
                 std::cout << RED << "[!] Tipo de auxiliar no soportado: " << tipo << RESET << std::endl;
                 return;
             }
+            if (!entorno.empty()) {
+                std::filesystem::path activate = std::filesystem::path(python_envs_dir) / entorno / "bin/activate";
+                if (!std::filesystem::exists(activate)) {
+                    std::cout << RED << "[!] Entorno virtual '" << entorno << "' no encontrado en " << activate.parent_path() << RESET << std::endl;
+                    std::cout << "    Usa " << BOLD << "aux -lp" << RESET << " para listar entornos disponibles.\n";
+                    return;
+                }
+                comando = "source '" + activate.string() + "' && " + comando;
+            }
             std::cout << "[*] Ejecutando: " << comando << std::endl;
             int ret = system(comando.c_str());
             if (ret == -1) {
@@ -150,18 +239,19 @@ void run_aux_tipo(const std::string& tipo, const std::string& nombre, const std:
     std::cout << RED << "[!] Auxiliar no encontrado: " << nombre << " de tipo " << tipo << RESET << std::endl;
 }
 
-// Ayuda profesional alineada (actualizada)
 void print_usage_aux() {
     std::cout << BOLD << CYAN << "\nComandos auxiliares disponibles:\n" << RESET
-              << GREEN << "  aux -l, --list              " << RESET << "Lista los auxiliares (nombre y descripción)\n"
-              << GREEN << "  aux -run <nombre> [args...] " << RESET << "Ejecuta un auxiliar (tipo autodetectado)\n"
-              << GREEN << "  aux -run <tipo> <nombre> [args...]" << RESET << " Forzar tipo si hay ambigüedad\n"
-              << "                                Tipos soportados: "
+              << GREEN << "  aux -l, --list                 " << RESET << "    Lista los auxiliares (nombre y descripción)\n"
+              << GREEN << "  aux -lp                        " << RESET << "    Lista los entornos virtuales Python detectados\n"
+              << GREEN << "  aux -run <nombre> [args...]    " << RESET << "    Ejecuta un auxiliar (tipo autodetectado)\n"
+              << GREEN << "  aux -run <tipo> <nombre> [args...]" << RESET << "    Forzar tipo si hay ambigüedad\n"
+              << GREEN << "        -p:<entorno>             " << RESET << "    Ejecuta el auxiliar en el entorno virtual Python indicado\n"
+              << "                                    Tipos soportados: "
               << BOLD << "py" << RESET << ", "
               << BOLD << "sh" << RESET << ", "
               << BOLD << "pr" << RESET << ", "
               << BOLD << "c"  << RESET << "\n"
-              << GREEN << "  aux -h, --help              " << RESET << "Muestra esta ayuda\n"
+              << GREEN << "  aux -h, --help                 " << RESET << "Muestra esta ayuda\n"
               << std::endl;
 }
 
@@ -169,13 +259,16 @@ void print_usage_aux() {
 void aux(const std::string& argumentos) {
     std::string args = argumentos;
     while (!args.empty() && isspace(args.front())) args.erase(args.begin());
-    // Parser
     if (args.empty() || args == "-h" || args == "--help") {
         print_usage_aux();
         return;
     }
     if (args == "-l" || args == "--list") {
         list_aux();
+        return;
+    }
+    if (args == "-lp") {
+        list_python_envs();
         return;
     }
     // aux -run <nombre> [args...]
@@ -188,15 +281,12 @@ void aux(const std::string& argumentos) {
         std::getline(iss, argstr);
         while (!argstr.empty() && isspace(argstr.front())) argstr.erase(argstr.begin());
 
-
         if ((primer == "py" || primer == "sh" || primer == "pr" || primer == "c") && !segundo.empty()) {
             run_aux_tipo(primer, segundo, argstr);
         } else {
-            // Solo -run <nombre> [args...]
             run_aux(primer, segundo + argstr);
         }
         return;
     }
-
     print_usage_aux();
 }
