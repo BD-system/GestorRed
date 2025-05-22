@@ -1,3 +1,5 @@
+// /gestor_red/equipos_red/analizarRedFase1.cpp
+
 #include "equipos_red/EquiposRed.hpp"
 #include <cstdio>
 #include <iostream>
@@ -12,16 +14,19 @@
 #include <algorithm>
 #include <cctype>
 
-// Función trim: elimina espacios, saltos de línea, retornos de carro y tabulaciones
+// Elimina espacios y caracteres de control al inicio y al final de una cadena.
+// Esto es útil para limpiar líneas obtenidas desde la salida de comandos como nmap.
 std::string trim(const std::string& s) {
     size_t start = s.find_first_not_of(" \n\r\t");
     if (start == std::string::npos)
-        return "";  // La cadena está compuesta solo de espacios o está vacía.
+        return "";  // La cadena está vacía o contiene solo espacios.
     size_t end = s.find_last_not_of(" \n\r\t");
     return s.substr(start, end - start + 1);
 }
 
-// Función auxiliar para calcular la máscara CIDR
+
+// Calcula el prefijo CIDR correspondiente al rango entre la IP de red y la de broadcast.
+// Esto se usa para determinar el rango que se va a escanear con Nmap.
 int calcularCIDR(const std::string& ipRed, const std::string& broadcast) {
     in_addr red, bcast;
     inet_pton(AF_INET, ipRed.c_str(), &red);
@@ -38,22 +43,24 @@ int calcularCIDR(const std::string& ipRed, const std::string& broadcast) {
     return bits;
 }
 
-// Función para validar que una cadena sea una IPv4 válida
+// Verifica si una cadena es una dirección IPv4 válida.
+// Se utiliza una expresión regular que cubre el rango válido de cada octeto.
 bool ipValida(const std::string& ip) {
     if (ip.empty() || ip.size() > 32) return false;
     std::regex ipRegex("^((25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)\\.){3}(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)$");
     return std::regex_match(ip, ipRegex);
 }
 
-// Función estática: Análisis de la red (Fase 1)
+// Fase 1 del análisis de red: descubrimiento básico y detección forzada de dispositivos activos.
+// Esta función realiza un escaneo de red mediante Nmap y devuelve una lista de equipos detectados.
 std::vector<EquiposRed> EquiposRed::analizarRedFase1(const std::string& ipRed,
                                                      const std::string& broadcast,
                                                      const std::string& interfaz)
 {
     std::vector<EquiposRed> encontrados;
-    encontrados.reserve(256);
-    std::set<std::string> ipsDetectadas;
-    int cidr = calcularCIDR(ipRed, broadcast);
+    encontrados.reserve(256); // Reservo memoria anticipadamente para optimizar inserciones.
+    std::set<std::string> ipsDetectadas; // Para evitar duplicados.
+    int cidr = calcularCIDR(ipRed, broadcast); // Determinao el prefijo para el escaneo.
 
     // SCAN 1: Descubrimiento inicial con nmap (mensaje resumido)
     std::cout << "[DEBUG][Fase1] Buscar dispositivos encendidos en la red\n";
@@ -71,19 +78,22 @@ std::vector<EquiposRed> EquiposRed::analizarRedFase1(const std::string& ipRed,
         std::string ipActual;
         while (fgets(buffer, sizeof(buffer), fp)) {
             std::string linea(buffer);
+            // Detecto líneas que contienen IPs detectadas por Nmap.
             if (linea.find("Nmap scan report for") != std::string::npos) {
                 size_t pos = linea.find_last_of(' ');
                 if (pos != std::string::npos) {
                     ipActual = trim(linea.substr(pos + 1));
                     if (!ipValida(ipActual)) continue;
                     ipsDetectadas.insert(ipActual);
-                    // En Scan 1, si se encuentra, el estado debe ser normal.
+                    
+                    // Asigno el estado "normal" porque fue detectado en un escaneo estándar.
                     EquiposRed equipo(ipActual, "normal");
                     equipo.setMetodo("Nmap-ping");
                     equipo.setInterfaz(interfaz);
                     encontrados.push_back(equipo);
                 }
             }
+            // También intento capturar la MAC y el fabricante si está disponible.
             else if (linea.find("MAC Address:") != std::string::npos && !ipActual.empty()) {
                 std::regex macRegex("MAC Address: ([0-9A-Fa-f:]{17}) ?(.*)?");
                 std::smatch match;
@@ -104,7 +114,7 @@ std::vector<EquiposRed> EquiposRed::analizarRedFase1(const std::string& ipRed,
         std::cout << "[DEBUG][Fase1] Completada: " << encontrados.size() << " dispositivos encontrados.\n";
     }
 
-    // SCAN 2: Detección forzada de IPs no detectadas previamente
+    // SEGUNDO ESCANEO: para las IPs que no respondieron antes, fuerzo un escaneo individual.
     std::cout << "[DEBUG][Scan2] Detección forzada de IPs no detectadas previamente\n";
     {
         in_addr red, bcast;
@@ -124,7 +134,7 @@ std::vector<EquiposRed> EquiposRed::analizarRedFase1(const std::string& ipRed,
             inet_ntop(AF_INET, &addr, ipStr, INET_ADDRSTRLEN);
             std::string ipCandidata = ipStr;
             
-            // Calcular porcentaje y construir una barra de progreso "bonita"
+            // Construyo e imprimo una barra de progreso en la terminal.
             int percentage = static_cast<int>((currentCount * 100.0) / totalIPs);
             int barWidth = 50;
             int posBar = (percentage * barWidth) / 100;
@@ -144,7 +154,7 @@ std::vector<EquiposRed> EquiposRed::analizarRedFase1(const std::string& ipRed,
             
             // Para actualizar dinámicamente, mover el cursor una línea hacia arriba (a la barra)
             if (ip < end - 1)
-                std::cout << "\033[F"; // ANSI: mover cursor una línea arriba
+                std::cout << "\033[F"; // Muevo el cursor hacia arriba para sobrescribir la línea anterior.
 
             // Si la IP ya fue detectada o no es válida, salta el escaneo
             if (ipsDetectadas.count(ipCandidata)) continue;
@@ -153,8 +163,6 @@ std::vector<EquiposRed> EquiposRed::analizarRedFase1(const std::string& ipRed,
             std::ostringstream cmd;
             cmd << "nmap -sn -n --max-retries 1 --host-timeout 500ms -e "
                 << interfaz << " " << ipCandidata;
-            // Puedes comentar o eliminar la siguiente línea para evitar saltos de línea extra en debug
-            // std::cout << "\n[DEBUG][Scan2] Escaneando comando para IP: " << ipCandidata << "\n";
 
             FILE* fp2 = popen(cmd.str().c_str(), "r");
             if (!fp2) {

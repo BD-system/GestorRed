@@ -1,9 +1,14 @@
+// /gestor_red/equipos_red/EquiposRed.hpp
+
 #pragma once
 #include <string>
 #include <vector>
 #include <iostream>
 #include <map>
 
+// Esta clase representa un dispositivo de red detectado durante el análisis.
+// Incluye toda la información que puedo extraer: IP, MAC, SO, puertos abiertos, etc.
+// La uso como estructura central para todas las fases de análisis.
 class EquiposRed {
 private:
     // Atributos (ordenados para evitar warnings de reorden)
@@ -25,13 +30,13 @@ private:
     std::string notasDetalladas;
 
 public:
-    // Constructor principal con inicialización directa
+    // Constructor principal, con IP obligatoria y estado opcional (por defecto: "vacía").
     EquiposRed(const std::string& ip, const std::string& estado = "vacía")
         : ip(ip), estado(estado), ttl(-1), rttMs(-1)
     {
     }
 
-    // Constructor de copia con mensaje de debug (activado solo si DEBUG está definido)
+    // Constructor de copia. Si defino DEBUG, imprimo en consola cuándo se ejecuta.
     EquiposRed(const EquiposRed& other)
         : ip(other.ip), mac(other.mac), hostname(other.hostname),
           metodoDescubrimiento(other.metodoDescubrimiento),
@@ -53,10 +58,10 @@ public:
     #endif
     }
 
-    // Constructor por defecto
+    // Constructor por defecto. Lo uso en vectores y casos de inicialización vacía.
     EquiposRed() : estado("vacía"), ttl(-1), rttMs(-1) {}
 
-    // Constructor de movimiento
+    // Constructor de movimiento. Muevo todos los campos para evitar copias innecesarias.
     EquiposRed(EquiposRed&& other) noexcept
         : ip(std::move(other.ip)), mac(std::move(other.mac)), hostname(std::move(other.hostname)),
           metodoDescubrimiento(std::move(other.metodoDescubrimiento)),
@@ -74,7 +79,7 @@ public:
           notasDetalladas(std::move(other.notasDetalladas))
     {}
 
-    // Operador de asignación por movimiento
+    // Operador de asignación por movimiento. Verifico que no sea autoasignación y muevo todos los datos.
     EquiposRed& operator=(EquiposRed&& other) noexcept {
         if (this != &other) {
             ip = std::move(other.ip);
@@ -97,7 +102,7 @@ public:
         return *this;
     }
 
-    // Operador de asignación de copia
+    // Operador de asignación por copia. Copio campo por campo.
     EquiposRed& operator=(const EquiposRed& other) {
         if (this != &other) {
             ip = other.ip;
@@ -120,7 +125,8 @@ public:
         return *this;
     }
 
-    // Setters
+    // --- Setters ---
+    // Asigno valores a los campos individualmente. Algunos los uso desde funciones como analizarRedFaseX.
     void setMAC(const std::string& m) { mac = m; }
     void setHostname(const std::string& h) { hostname = h; }
     void setMetodo(const std::string& m) { metodoDescubrimiento = m; }
@@ -137,7 +143,8 @@ public:
     void addVulnerabilidad(const std::string& vuln) { vulnerabilidades.push_back(vuln); }
     void setNotasDetalladas(const std::string& n) { notasDetalladas = n; }
 
-    // Getters
+    // --- Getters ---
+    // Uso estos métodos para acceder a los datos desde otras funciones o para exportarlos a la base de datos.
     std::string getIP() const { return ip; }
     std::string getMAC() const { return mac; }
     std::string getHostname() const { return hostname; }
@@ -155,10 +162,6 @@ public:
     std::vector<std::string> getVulnerabilidades() const { return vulnerabilidades; }
     std::string getNotasDetalladas() const { return notasDetalladas; }
 
-    // Métodos de análisis (a implementar según se requiera)
-    void realizarARPScan();
-    void realizarPingSweep();
-
     // Métodos estáticos de análisis por fases
     static std::vector<EquiposRed> analizarRedFase1(const std::string& ipRed,
                                                     const std::string& broadcast,
@@ -166,14 +169,15 @@ public:
     static std::vector<EquiposRed> analizarRedFase2(const std::vector<EquiposRed>& dispositivos, const std::string& interfaz);
     static std::vector<EquiposRed> analizarRedFase3(...); // Pendiente
 
-    // Controlador general, que ahora utiliza la segunda fase:
-    // Controlador general, que ahora utiliza la segunda fase:
+    // Función central que orquesta las fases de análisis. De momento usa Fase 1 y Fase 2.
     static std::vector<EquiposRed> analizarRed_gestor(const std::string& ipRed,
                                                    const std::string& broadcast,
                                                    const std::string& interfaz);
 
 
-    // Depuración / Resumen
+
+    // --- Función de depuración ---
+    // Esta función imprime un resumen completo del equipo, útil para debug y para mostrar por consola.
     void imprimirResumen() const {
         std::cout << "-------------------------------\n";
         std::cout << "IP: " << ip << "  [Estado: " << estado << "]\n";

@@ -1,3 +1,5 @@
+// /gestor_red/equipos_red/EquiposRed.cpp
+
 #include "EquiposRed.hpp"
 #include <iostream>
 #include <vector>
@@ -12,7 +14,7 @@ std::vector<EquiposRed> EquiposRed::analizarRed_gestor(const std::string& ip,
     std::vector<EquiposRed> dispositivosFase1 = analizarRedFase1(ip, mask, interfaz);
     std::cout << "[DEBUG][Fase1] Completada: " << dispositivosFase1.size() << " dispositivos encontrados.\n";
 
-    // Fase 2: Análisis detallado (puertos, banner grabbing y detección de OS)
+    // Fase 2: Análisis detallado (puertos, detección de OS...)
     std::cout << "[DEBUG][Fase2] Iniciada...\n";
     std::vector<EquiposRed> dispositivosFase2 = analizarRedFase2(dispositivosFase1, interfaz);
     std::cout << "[DEBUG][Fase2] Completada: " << dispositivosFase2.size() << " dispositivos refinados.\n";

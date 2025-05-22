@@ -1,7 +1,7 @@
-// inicializador.cpp
 #include <iostream>
 #include <vector>
 #include <string>
+#include <map>
 #include <cstring>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
@@ -10,21 +10,14 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include "equipos_red/EquiposRed.hpp"
+#include "equipos_red/InterfaceInfoRed.hpp"
+#include "BBDD/BBDD.hpp"
+#include "BBDD/GestorBBDD.hpp"
 
+// --- DECLARACIÓN: función que lanza la terminal (la implementas en terminal.cpp) ---
+void lanzarTerminal();
 
-
-struct InterfaceInfoRed {
-    std::string nombre;
-    std::string ip;
-    std::string mac;
-    std::string mascara;
-    std::string ipRed;
-    std::string broadcast;
-    int totalEquipos;
-};
-
-
-
+// --- Calcula la red y broadcast de una interfaz ---
 void calcularRedYBroadcast(const std::string& ipStr, const std::string& maskStr, std::string& ipRedStr, std::string& broadcastStr) {
     struct in_addr ipAddr, maskAddr, networkAddr, broadcastAddr;
     if (inet_pton(AF_INET, ipStr.c_str(), &ipAddr) != 1 || inet_pton(AF_INET, maskStr.c_str(), &maskAddr) != 1) {
@@ -42,8 +35,7 @@ void calcularRedYBroadcast(const std::string& ipStr, const std::string& maskStr,
     broadcastStr = broadcastBuffer;
 }
 
-
-
+// --- Detecta las interfaces físicas y calcula sus datos ---
 std::vector<InterfaceInfoRed> detectarInterfaces() {
     std::vector<InterfaceInfoRed> interfaces;
     struct ifaddrs *ifaddr, *ifa;
@@ -87,11 +79,23 @@ std::vector<InterfaceInfoRed> detectarInterfaces() {
     return interfaces;
 }
 
+// --- Pide al usuario etiquetas para cada interfaz ---
+std::map<std::string, std::string> pedirEtiquetasPorInterfaz(const std::vector<InterfaceInfoRed>& interfaces) {
+    std::map<std::string, std::string> etiquetasPorInterfaz;
+    for (const auto& iface : interfaces) {
+        std::cout << "[ETIQUETA] Introduce una etiqueta para la interfaz " << iface.nombre
+                  << " (" << iface.ip << "): ";
+        std::string etiqueta;
+        std::getline(std::cin, etiqueta);
+        if (etiqueta.empty()) etiqueta = "default"; // Fallback
+        etiquetasPorInterfaz[iface.nombre] = etiqueta;
+    }
+    return etiquetasPorInterfaz;
+}
 
-
+// --- Analiza la red usando la info de las interfaces ---
 std::vector<EquiposRed> analizarRed(const std::vector<InterfaceInfoRed>& interfaces) {
     std::vector<EquiposRed> resultados;
-
     std::cout << "[DEBUG] Entrando en analizarRed()\n";
     std::cout << "[DEBUG] Número de interfaces detectadas: " << interfaces.size() << "\n";
 
@@ -118,29 +122,56 @@ std::vector<EquiposRed> analizarRed(const std::vector<InterfaceInfoRed>& interfa
     return resultados;
 }
 
-
-
-bool guardarDatosEnBD(const std::vector<EquiposRed>& dispositivos) {
+// --- Guarda los equipos en la base de datos con su etiqueta ---
+bool guardarDatosEnBD(const std::vector<EquiposRed>& dispositivos, GestorBBDD& gestor, const std::map<std::string, std::string>& etiquetasPorInterfaz) {
     std::cout << "[DEBUG] Llamada a guardarDatosEnBD().\n";
-    for (const auto& d : dispositivos) d.imprimirResumen();
-    return true;
+    bool todoOK = true;
+    for (const auto& d : dispositivos) {
+        d.imprimirResumen();
+        try {
+            std::string interfaz = d.getInterfaz();
+            std::string etiqueta = "default";
+            if (etiquetasPorInterfaz.count(interfaz)) {
+                etiqueta = etiquetasPorInterfaz.at(interfaz);
+            }
+            if (!gestor.insertarEquipo(d, etiqueta)) {
+                std::cerr << "[ERROR] No se pudo insertar el equipo en la BBDD (IP: " << d.getIP() << ")\n";
+                todoOK = false;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[ERROR] Excepción al insertar equipo en BBDD: " << e.what() << "\n";
+            todoOK = false;
+        }
+    }
+    return todoOK;
 }
 
-
+// --- Guarda las interfaces en la base de datos ---
+bool guardarInterfacesEnBD(const std::vector<InterfaceInfoRed>& interfaces, GestorBBDD& gestor) {
+    bool todoOK = true;
+    for (const auto& iface : interfaces) {
+        try {
+            if (!gestor.insertarInterfaz(iface)) {
+                std::cerr << "[ERROR] No se pudo insertar la interfaz en la BBDD (Nombre: " << iface.nombre << ")\n";
+                todoOK = false;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[ERROR] Excepción al insertar interfaz en BBDD: " << e.what() << "\n";
+            todoOK = false;
+        }
+    }
+    return todoOK;
+}
 
 bool sincronizarBD() {
     std::cout << "[DEBUG] Llamada a sincronizarBD().\n";
     return true;
 }
 
-
-
 bool inicializarModulos(const std::string& rutaModulos) {
     std::cout << "[DEBUG] Llamada a inicializarModulos() para la ruta: " << rutaModulos << "\n";
     return true;
 }
-
-
 
 void inicializarSistema() {
     std::cout << "==================================\n";
@@ -148,9 +179,18 @@ void inicializarSistema() {
     std::cout << "==================================\n";
 
     auto interfaces = detectarInterfaces();
+    auto etiquetasPorInterfaz = pedirEtiquetasPorInterfaz(interfaces);
     auto dispositivos = analizarRed(interfaces);
 
-    if (!guardarDatosEnBD(dispositivos)) {
+    BBDD conexionBBDD("localhost", 3306, "gestor_red", "Ydnqnuedu1qrq1FMQUE1q34", "gestor_red");
+    GestorBBDD gestor(&conexionBBDD);
+
+    if (!guardarInterfacesEnBD(interfaces, gestor)) {
+        std::cerr << "[ERROR] Fallo al guardar las interfaces en la base de datos interna.\n";
+        std::exit(EXIT_FAILURE);
+    }
+
+    if (!guardarDatosEnBD(dispositivos, gestor, etiquetasPorInterfaz)) {
         std::cerr << "[ERROR] Fallo al guardar los datos en la base de datos interna.\n";
         std::exit(EXIT_FAILURE);
     }
@@ -165,12 +205,11 @@ void inicializarSistema() {
         std::exit(EXIT_FAILURE);
     }
 
-    std::cout << "[INFO] Inicialización completada. Se iniciaría la terminal interactiva ahora.\n";
+    std::cout << "[INFO] Inicialización completada. Se iniciará la terminal interactiva ahora.\n";
 }
-
-
 
 int main() {
     inicializarSistema();
+    lanzarTerminal(); // <-- Pasa el control a la terminal modular
     return 0;
 }
