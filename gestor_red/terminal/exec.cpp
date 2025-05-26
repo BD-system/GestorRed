@@ -53,7 +53,6 @@ void print_usage() {
               << "    - Si usas el prefijo " << BOLD << "modules:/" << RESET << " (por ejemplo, "
               << BOLD << "modules:/payloads_escaneo/SO_2.bin" << RESET << "),\n"
               << "      lo buscará en la ruta compartida: " << BOLD << "/root/gestor_de_red/src/modules/payloads_escaneo/SO_2.bin" << RESET << "\n"
-              << "    - Si no lo encuentra, intentará usar la ruta actual o absoluta que le des.\n"
               << std::endl
 
               << BOLD << CYAN << "Ejemplos de uso:\n" << RESET

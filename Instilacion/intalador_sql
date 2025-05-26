@@ -1,0 +1,70 @@
+#!/bin/bash
+
+DBNAME="gestor_red"
+DBUSER="gestor_red"
+DBPASS="Ydnqnuedu1qrq1FMQUE1q34"
+
+echo "======================================="
+echo " Instalando y configurando MariaDB para Gestor de Red"
+echo "======================================="
+
+# Instala MariaDB Server si no está instalado
+sudo apt update
+sudo apt install -y mariadb-server
+
+# Arranca MariaDB si está parada
+sudo systemctl start mariadb
+
+# Genera el SQL de inicialización
+cat > /tmp/setup_gestor_red.sql <<EOF
+CREATE DATABASE IF NOT EXISTS $DBNAME;
+
+CREATE USER IF NOT EXISTS '$DBUSER'@'localhost' IDENTIFIED BY '$DBPASS';
+GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'localhost';
+
+USE $DBNAME;
+
+CREATE TABLE IF NOT EXISTS interfaces (
+    id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    ip VARCHAR(15) NOT NULL,
+    mascara VARCHAR(15) NOT NULL,
+    ip_red VARCHAR(15) NOT NULL,
+    broadcast VARCHAR(15) NOT NULL,
+    mac VARCHAR(17) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS equipos_red (
+    id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    etiqueta VARCHAR(100) NOT NULL,
+    ip VARCHAR(15) NOT NULL,
+    mac VARCHAR(17),
+    hostname VARCHAR(100),
+    metodo_descubrimiento VARCHAR(100),
+    puertos_abiertos TEXT,
+    banners TEXT,
+    sistema_operativo VARCHAR(100),
+    interfaz_detectada VARCHAR(100),
+    estado VARCHAR(50),
+    ttl INT(11),
+    rtt_ms INT(11),
+    notas TEXT,
+    vendor VARCHAR(100),
+    vulnerabilidades TEXT,
+    notas_detalladas TEXT,
+    fecha DATETIME NOT NULL
+);
+EOF
+
+# Ejecuta el SQL con root
+sudo mariadb -u root < /tmp/setup_gestor_red.sql
+
+if [ $? -eq 0 ]; then
+  echo "[OK] Base de datos, tablas y usuario creados correctamente."
+else
+  echo "[ERROR] Hubo un problema creando la base de datos o usuario."
+  exit 1
+fi
+
+# Limpieza del archivo temporal
+rm /tmp/setup_gestor_red.sql

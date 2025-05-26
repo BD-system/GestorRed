@@ -1,0 +1,13 @@
+#!/bin/bash
+
+mkdir -p /root/gestor_de_red/aux
+mkdir -p /root/gestor_de_red/bin
+mkdir -p /root/gestor_de_red/config
+mkdir -p /root/gestor_de_red/logs/complementos
+mkdir -p /root/gestor_de_red/logs/gestor
+mkdir -p /root/gestor_de_red/logs/modulos
+mkdir -p /root/gestor_de_red/modules
+mkdir -p /root/gestor_de_red/sql/inicio
+mkdir -p /root/gestor_de_red/sql/script
+mkdir -p /root/gestor_de_red/src/auxiliares
+mkdir -p /root/gestor_de_red/src/modules
