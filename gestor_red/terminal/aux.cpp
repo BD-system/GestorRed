@@ -241,17 +241,17 @@ void run_aux_tipo(const std::string& tipo, const std::string& nombre, std::strin
 
 void print_usage_aux() {
     std::cout << BOLD << CYAN << "\nComandos auxiliares disponibles:\n" << RESET
-              << GREEN << "  aux -l, --list                 " << RESET << "    Lista los auxiliares (nombre y descripción)\n"
-              << GREEN << "  aux -lp                        " << RESET << "    Lista los entornos virtuales Python detectados\n"
-              << GREEN << "  aux -run <nombre> [args...]    " << RESET << "    Ejecuta un auxiliar (tipo autodetectado)\n"
+              << GREEN << "  aux -l, --list                    " << RESET << "    Lista los auxiliares (nombre y descripción)\n"
+              << GREEN << "  aux -lp                           " << RESET << "    Lista los entornos virtuales Python detectados\n"
+              << GREEN << "  aux -run <nombre> [args...]       " << RESET << "    Ejecuta un auxiliar (tipo autodetectado)\n"
               << GREEN << "  aux -run <tipo> <nombre> [args...]" << RESET << "    Forzar tipo si hay ambigüedad\n"
-              << GREEN << "        -p:<entorno>             " << RESET << "    Ejecuta el auxiliar en el entorno virtual Python indicado\n"
+              << GREEN << "        -p:<entorno>                " << RESET << "    Ejecuta el auxiliar en el entorno virtual Python indicado\n"
               << "                                    Tipos soportados: "
               << BOLD << "py" << RESET << ", "
               << BOLD << "sh" << RESET << ", "
               << BOLD << "pr" << RESET << ", "
               << BOLD << "c"  << RESET << "\n"
-              << GREEN << "  aux -h, --help                 " << RESET << "Muestra esta ayuda\n"
+              << GREEN << "  aux -h, --help                    " << RESET << "    Muestra esta ayuda\n"
               << std::endl;
 }
 

@@ -1,29 +1,32 @@
 #pragma once
 
-#include <cppconn/prepared_statement.h>
-#include <cppconn/exception.h>
-#include <cppconn/driver.h>
-#include <cppconn/connection.h>
+// --- MySQL Connector ---
 #include <mysql_driver.h>
-#include <stdexcept>
-#include <iostream> 
-#include <memory>
-#include <string>
-#include <cppconn/prepared_statement.h>
-#include <stdexcept>
 #include <cppconn/driver.h>
 #include <cppconn/connection.h>
 #include <cppconn/exception.h>
-#include "UtilsSQL.hpp"
-#include <sstream>
-#include <algorithm>
-#include <vector>
-#include <map>
-#include <cstdio>
-#include <regex>
-#include <set>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <cctype>
+#include <cppconn/prepared_statement.h>
+
+// --- C++ Standard ---
+#include <stdexcept>       // Excepciones estándar
+#include <iostream>        // IO estándar
+#include <memory>          // Smart pointers
+#include <string>          // Strings
+#include <sstream>         // Streams de texto
+#include <algorithm>       // Algoritmos STL
+#include <vector>          // Vector dinámico
+#include <map>             // Map/diccionario
+#include <set>             // Set/conjunto
+#include <iomanip>         // Formateo de IO
+#include <regex>           // Expresiones regulares
+#include <filesystem>      // Manipulación de archivos (C++ Version:17 o 17+)
+#include <fstream>         // IO de archivos
+
+// --- C Standard / Unix ---
+#include <cstdio>          // IO C
+#include <cstdlib>         // Utilidades C
+#include <unistd.h>        // Funciones POSIX/UNIX
+#include <arpa/inet.h>     // Manipulación de IP
+#include <netinet/in.h>    // Sockets/redes
+#include <netdb.h>         // Resolución DNS
+#include <cctype>          // Funciones de caracteres

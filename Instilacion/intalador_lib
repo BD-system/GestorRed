@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Instala todas las dependencias para Gestor de Red
+sudo apt update && sudo apt install -y \
+  g++ \
+  make \
+  libmysqlcppconn-dev \
+  libreadline-dev \
+  nmap \
+  build-essential \
+  cmake \
+  pkg-config
