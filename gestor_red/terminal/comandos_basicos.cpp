@@ -2,7 +2,9 @@
 #include "comandos_basicos.hpp"
 #include "style_terminal.hpp"
 #include "exec.hpp"
-#include "aux.hpp" // <--- IMPORTANTE: incluye el header de aux
+#include "aux.hpp"
+// Incluye aquí tu header para db (puedes crearlo si no existe)
+#include "db.hpp"  
 
 bool procesarComandoBasico(const std::string& linea) {
     if (linea == "help" || linea == "?") {
@@ -33,6 +35,15 @@ bool procesarComandoBasico(const std::string& linea) {
         return true;
     } else if (linea == "aux") {
         aux("");
+        return true;
+    } 
+    else if (linea.rfind("db ", 0) == 0) {
+        std::string argumentos = linea.substr(3);
+        while (!argumentos.empty() && isspace(argumentos.front())) argumentos.erase(argumentos.begin());
+        db(argumentos);
+        return true;
+    } else if (linea == "db") {
+        db("");
         return true;
     }
     return false;
